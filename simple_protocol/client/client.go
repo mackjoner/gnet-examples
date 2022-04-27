@@ -10,9 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/panjf2000/gnet/v2/pkg/logging"
-
 	"github.com/gnet-io/gnet-examples/simple_protocol/protocol"
+	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
 
 func logErr(err error) {

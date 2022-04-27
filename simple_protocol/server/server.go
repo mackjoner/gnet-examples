@@ -13,12 +13,12 @@ import (
 
 type simpleServer struct {
 	gnet.BuiltinEventEngine
-	eng          gnet.Engine
-	network      string
-	addr         string
-	multicore    bool
-	connected    int32
-	disconnected int32
+	eng       gnet.Engine
+	network   string
+	addr      string
+	multicore bool
+	connected int32
+	// disconnected int32
 }
 
 func (s *simpleServer) OnBoot(eng gnet.Engine) (action gnet.Action) {
@@ -29,26 +29,33 @@ func (s *simpleServer) OnBoot(eng gnet.Engine) (action gnet.Action) {
 }
 
 func (s *simpleServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
+	logging.Infof("========== OnOpen ==========\n")
 	c.SetContext(new(protocol.SimpleCodec))
 	atomic.AddInt32(&s.connected, 1)
+
 	out = []byte("sweetness\r\n")
+
 	return
 }
 
 func (s *simpleServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
+	logging.Infof("========== OnClose ==========\n")
 	if err != nil {
 		logging.Infof("error occurred on connection=%s, %v\n", c.RemoteAddr().String(), err)
 	}
-	disconnected := atomic.AddInt32(&s.disconnected, 1)
-	connected := atomic.AddInt32(&s.connected, -1)
-	if connected == 0 {
-		logging.Infof("all %d connections are closed, shut it down", disconnected)
-		action = gnet.Shutdown
-	}
+	// disconnected := atomic.AddInt32(&s.disconnected, 1)
+	atomic.AddInt32(&s.connected, -1)
+	// if connected == 0 {
+	// 	// logging.Infof("all %d connections are closed, shut it down", disconnected)
+	// 	// action = gnet.Shutdown
+	// 	logging.Infof("all connections are closed")
+	// 	action = gnet.None
+	// }
 	return
 }
 
 func (s *simpleServer) OnTraffic(c gnet.Conn) (action gnet.Action) {
+	logging.Infof("========== OnTraffic ==========\n")
 	codec := c.Context().(*protocol.SimpleCodec)
 	var packets [][]byte
 	for {
