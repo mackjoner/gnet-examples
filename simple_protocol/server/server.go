@@ -17,62 +17,68 @@ type simpleServer struct {
 	network   string
 	addr      string
 	multicore bool
-	connected int32
-	// disconnected int32
+	connected int64
 }
 
+// OnBoot tcp server run
 func (s *simpleServer) OnBoot(eng gnet.Engine) (action gnet.Action) {
-	logging.Infof("running server on %s with multi-core=%t",
-		fmt.Sprintf("%s://%s", s.network, s.addr), s.multicore)
+	logging.Infof("running server on %s with multi-core=%t", fmt.Sprintf("%s://%s", s.network, s.addr), s.multicore)
 	s.eng = eng
 	return
 }
 
+// OnOpen tcp connected
 func (s *simpleServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
-	logging.Infof("========== OnOpen ==========\n")
+	fmt.Println("============= 客户端服务端建立连接 ===========")
 	c.SetContext(new(protocol.SimpleCodec))
-	atomic.AddInt32(&s.connected, 1)
-
-	out = []byte("sweetness\r\n")
-
+	atomic.AddInt64(&s.connected, 1)
 	return
 }
 
+// OnClose tcp connect closeed
 func (s *simpleServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
-	logging.Infof("========== OnClose ==========\n")
+	fmt.Println("============= 客户端服务端连接关闭 ===========")
 	if err != nil {
 		logging.Infof("error occurred on connection=%s, %v\n", c.RemoteAddr().String(), err)
 	}
-	// disconnected := atomic.AddInt32(&s.disconnected, 1)
-	atomic.AddInt32(&s.connected, -1)
-	// if connected == 0 {
-	// 	// logging.Infof("all %d connections are closed, shut it down", disconnected)
-	// 	// action = gnet.Shutdown
-	// 	logging.Infof("all connections are closed")
-	// 	action = gnet.None
-	// }
+	atomic.AddInt64(&s.connected, -1)
+	logging.Infof("conn[%v] disconnected", c.RemoteAddr().String())
 	return
 }
 
+// OnTracffice processing received data
 func (s *simpleServer) OnTraffic(c gnet.Conn) (action gnet.Action) {
-	logging.Infof("========== OnTraffic ==========\n")
+	fmt.Println("============= 服务端数据接收 ===========")
+	// protocol
 	codec := c.Context().(*protocol.SimpleCodec)
 	var packets [][]byte
 	for {
+		// decode receive data
+		fmt.Println("============= 服务端循环处理收到的数据 ===========")
 		data, err := codec.Decode(c)
+		logging.Infof("data length: %d", len(data))
 		if err == protocol.ErrIncompletePacket {
+			fmt.Println("============= 服务端退出循环 ===========")
 			break
 		}
 		if err != nil {
+			fmt.Println("============= 服务端处理数据有错误 ===========")
 			logging.Errorf("invalid packet: %v", err)
 			return gnet.Close
 		}
-		packet, _ := codec.Encode(data)
+		// TODO
+		// receive data conversion to http request
+		// http response write to packet
+		// packet, _ := codec.Encode(data)
+		packet := []byte(`{"foo":"bar"}`)
 		packets = append(packets, packet)
 	}
+	// write data packet
 	if n := len(packets); n > 1 {
+		fmt.Println("============= 服务端回写数据 packets ===========")
 		_, _ = c.Writev(packets)
 	} else if n == 1 {
+		fmt.Println("============= 服务端回写数据 packets[0] ===========")
 		_, _ = c.Write(packets[0])
 	}
 	return

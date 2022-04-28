@@ -24,7 +24,9 @@ func (es *echoServer) OnBoot(eng gnet.Engine) gnet.Action {
 
 func (es *echoServer) OnTraffic(c gnet.Conn) gnet.Action {
 	buf, _ := c.Next(-1)
-	c.Write(buf)
+	fmt.Println(len(buf))
+	packet := []byte(`{"foo":"bar"}`)
+	c.Write(packet)
 	return gnet.None
 }
 
