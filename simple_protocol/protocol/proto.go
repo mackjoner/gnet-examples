@@ -8,7 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
+	"net/http"
+	"net/url"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/panjf2000/gnet/v2"
 	"github.com/panjf2000/gnet/v2/pkg/logging"
 )
@@ -16,89 +20,54 @@ import (
 var ErrIncompletePacket = errors.New("incomplete packet")
 
 const (
+	protoVersionSize  = 1
 	messageTypeSize   = 1
 	messageNumberSize = 2
-	serverRouterSize  = 2
 	bodySize          = 4
 
 	MsgHeartBeat byte = 1
 	MsgData      byte = 2
 	MsgGzipData  byte = 3
 	MsgZipData   byte = 4
+
+	DefaultProtoVersion byte = 1
 )
 
 // SimpleCodec Protocol format:
 //
-// * 0    1        3        5                9
-// * +----+--------+--------+----------------+
-// * |type| number | server |    body len    |
-// * +----+--------+--------+----------------+
-// * |                                       |
-// * +                                       +
-// * |              body bytes               |
-// * +                                       +
-// * |               ... ...                 |
-// * +---------------------------------------+
+// * 0    1    2        4                8
+// * +----+----+--------+----------------+
+// * |ver |type| number |    body len    |
+// * +----+----+--------+----------------+
+// * |                                   |
+// * +                                   +
+// * |               body bytes          |
+// * +                                   +
+// * |                ... ...            |
+// * +-----------------------------------+
 type SimpleCodec struct{}
 
-// type Header []byte
+type BodyData struct {
+	URI  string `json:"uri"`
+	Data []byte `json:"data"`
+}
 
-// func NewHeader(bs []byte) Header {
-// 	return Header(bs)
-// }
-
-// func (h Header) GetBytes() []byte {
-// 	return h
-// }
-
-// func (h Header) SetMessageType(t byte) {
-// 	h[0] = t
-// }
-
-// func (h Header) GetMessageType() byte {
-// 	return h[0]
-// }
-
-// func (h Header) SetMessageNumber(num uint16) {
-// 	binary.BigEndian.PutUint16(h[1:3], num)
-// }
-
-// func (h Header) GetMessageNumber() uint16 {
-// 	return binary.BigEndian.Uint16(h[1:3])
-// }
-
-// func (h Header) SetServerRouter(router uint16) {
-// 	binary.BigEndian.PutUint16(h[3:5], router)
-// }
-
-// func (h Header) GetSetServerRouterr() uint16 {
-// 	return binary.BigEndian.Uint16(h[3:5])
-// }
-
-// func (h Header) SetMessageLength(num uint32) {
-// 	binary.BigEndian.PutUint32(h[5:9], num)
-// }
-
-// func (h Header) GetMessageLength() uint32 {
-// 	return binary.BigEndian.Uint32(h[5:9])
-// }
-
-func (codec SimpleCodec) Encode(body []byte, msgType byte, msgNumber uint16, serverRouter uint16) ([]byte, error) {
-	bodyOffset := messageTypeSize + messageNumberSize + serverRouterSize + bodySize
+func (codec SimpleCodec) Encode(body []byte, msgType byte, msgNumber uint16, serverRouter byte) ([]byte, error) {
+	bodyOffset := protoVersionSize + messageTypeSize + messageNumberSize + bodySize
 	msgLen := bodyOffset + len(body)
 	data := make([]byte, msgLen)
 	header := make([]byte, bodyOffset)
-	header[0] = msgType
-	binary.BigEndian.PutUint16(header[1:3], msgNumber)
-	binary.BigEndian.PutUint16(header[3:5], serverRouter)
-	binary.BigEndian.PutUint32(header[5:9], uint32(len(body)))
+	header[0] = DefaultProtoVersion
+	header[1] = msgType
+	binary.BigEndian.PutUint16(header[2:4], msgNumber)
+	binary.BigEndian.PutUint32(header[4:8], uint32(len(body)))
 	copy(data[:bodyOffset], header)
 	copy(data[bodyOffset:msgLen], body)
 	return data, nil
 }
 
 func (codec *SimpleCodec) Decode(c gnet.Conn) ([]byte, error) {
-	bodyOffset := messageTypeSize + messageNumberSize + serverRouterSize + bodySize
+	bodyOffset := protoVersionSize + messageTypeSize + messageNumberSize + bodySize
 	fmt.Printf("headerSize: %d\n", bodyOffset)
 	// 消息头
 	buf, _ := c.Peek(bodyOffset)
@@ -106,17 +75,15 @@ func (codec *SimpleCodec) Decode(c gnet.Conn) ([]byte, error) {
 		fmt.Println("协议的消息头长度不符合")
 		return nil, ErrIncompletePacket
 	}
-	h := NewHeader(buf)
-	logging.Infof("%s", string(h.GetMessageType()))
 
 	// if !bytes.Equal(magicNumberBytes, buf[:bodyOffset]) {
 	// 	return nil, errors.New("invalid magic number")
 	// }
 
-	bodyLen := binary.BigEndian.Uint32(buf[5:9])
-	messageType := buf[0]
-	fmt.Printf("header messageType: %s\n", string(messageType))
-	fmt.Printf("bodySize: %d\n", bodyLen)
+	bodyLen := binary.BigEndian.Uint32(buf[4:8])
+	// messageType := buf[0]
+	fmt.Println("header messageType: ", buf[1])
+	fmt.Println("bodySize: ", bodyLen)
 	msgLen := bodyOffset + int(bodyLen)
 	fmt.Printf("msgSize: %d\n", msgLen)
 	if c.InboundBuffered() < msgLen {
@@ -124,27 +91,89 @@ func (codec *SimpleCodec) Decode(c gnet.Conn) ([]byte, error) {
 		return nil, ErrIncompletePacket
 	}
 	buf, _ = c.Peek(msgLen)
-	msg, err := decodeMsg(messageType, buf)
+	_, _ = c.Discard(msgLen)
+	msgData, err := decodeMsg(buf[1], buf, bodyOffset, msgLen)
 	if err != nil {
+		fmt.Printf("decodeMsg err: %s\n", err.Error())
 		return nil, err
 	}
-	_, _ = c.Discard(msgLen)
+
+	// TODO
+	// 数据解包处理
+	// 组装 http.Request
+	// 调用 http 接口的 handler
+	// 返回 http 接口的 response
+	if buf[1] == MsgData || buf[1] == MsgZipData || buf[1] == MsgGzipData {
+		var bodyData BodyData
+		err = jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(msgData, &bodyData)
+		if err != nil {
+			logging.Errorf("byte unmarshal err: %s\n", err.Error())
+		}
+		logging.Infof("uri: %s, request data: %+v\n", bodyData.URI, bodyData.Data)
+		url, err := url.Parse(bodyData.URI)
+		if err != nil {
+			logging.Infof("ParseRequestURI err: %s\n", err.Error())
+		}
+		logging.Infof("scheme: %s,host: %s, path: %s\n", url.Scheme, url.Host, url.Path)
+		// onMessage(bodyData.URI, bodyData.Data)
+	}
+
 	// return buf[bodyOffset:msgLen], nil
-	return msg, nil
+	// return msg, nil
+	return buf, nil
 }
 
-func decodeMsg(t byte, data []byte) ([]byte, error) {
-	fmt.Printf("messageType: %s\n", string(t))
-	// switch t {
-	// case MsgHeartBeat:
-	// 	break
-	// case MsgData:
-	// 	return data, nil
-	// case MsgGzipData:
-	// 	return decodeGzip(data)
-	// case MsgZipData:
-	// 	return decodeZlib(data)
+func onMessage(url string, buffer []byte) error {
+	// bearer := os.Getenv("TOKEN")
+	client := &http.Client{}
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(buffer))
+	// req.Header.Add("Authorization", "Bearer "+bearer)
+	req.Header.Add("content-type", "application/json")
+	resp, err := client.Do(req)
+
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	// else {
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+
+		// } else {
+		s := fmt.Sprintf("Response status: %s", resp.Status)
+		log.Println(s)
+		return errors.New(s)
+	}
+	// var result map[string]interface{}
+	// json.NewDecoder(resp.Body).Decode(&result)
+	// log.Println(result["status"])
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	// jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(body, &result)
+	log.Printf("resp: %+v\n", string(body))
+	return nil
 	// }
+}
+
+func decodeMsg(t byte, data []byte, bodyOffset, msgLen int) ([]byte, error) {
+	switch t {
+	case MsgHeartBeat:
+		fmt.Println("======== MsgHeartBeat ========")
+		fallthrough
+	case MsgData:
+		fmt.Println("======== MsgData ========")
+		return data[bodyOffset:msgLen], nil
+	case MsgGzipData:
+		fmt.Println("======== MsgGzipData ========")
+		return decodeGzip(data[bodyOffset:msgLen])
+	case MsgZipData:
+		fmt.Println("======== MsgZipData ========")
+		return decodeZlib(data[bodyOffset:msgLen])
+	}
+	fmt.Println("======== Unknown Msg Type ========")
 	return data, nil
 }
 
