@@ -55,6 +55,12 @@ type BodyData struct {
 
 func (codec SimpleCodec) Encode(header []byte, body []byte) ([]byte, error) {
 	bodyOffset := protoVersionSize + messageTypeSize + messageNumberSize + bodySize
+	if header[1] == MsgZipData {
+		body = EncodeZlib(body)
+	}
+	if header[1] == MsgGzipData {
+		body = EncodeGzip(body)
+	}
 	msgLen := bodyOffset + len(body)
 	data := make([]byte, msgLen)
 	//header := make([]byte, bodyOffset)
@@ -170,16 +176,16 @@ func decodeMsg(t byte, data []byte, bodyOffset, msgLen int) ([]byte, error) {
 		return data[bodyOffset:msgLen], nil
 	case MsgGzipData:
 		fmt.Println("======== MsgGzipData ========")
-		return decodeGzip(data[bodyOffset:msgLen])
+		return DecodeGzip(data[bodyOffset:msgLen])
 	case MsgZipData:
 		fmt.Println("======== MsgZipData ========")
-		return decodeZlib(data[bodyOffset:msgLen])
+		return DecodeZlib(data[bodyOffset:msgLen])
 	}
 	fmt.Println("======== Unknown Msg Type ========")
 	return data, nil
 }
 
-func decodeGzip(data []byte) ([]byte, error) {
+func DecodeGzip(data []byte) ([]byte, error) {
 	reader, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -187,12 +193,30 @@ func decodeGzip(data []byte) ([]byte, error) {
 	return ioutil.ReadAll(reader)
 }
 
-func decodeZlib(data []byte) ([]byte, error) {
+func EncodeGzip(data []byte) []byte {
+	buf := bytes.NewBuffer(nil)
+	writer := gzip.NewWriter(buf)
+	writer.Write(data)
+	writer.Flush()
+	writer.Close()
+	return buf.Bytes()
+}
+
+func DecodeZlib(data []byte) ([]byte, error) {
 	reader, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 	return ioutil.ReadAll(reader)
+}
+
+func EncodeZlib(data []byte) []byte {
+	buf := bytes.NewBuffer(nil)
+	writer := zlib.NewWriter(buf)
+	writer.Write(data)
+	writer.Flush()
+	writer.Close()
+	return buf.Bytes()
 }
 
 // func (codec SimpleCodec) Unpack(buf []byte) ([]byte, error) {
