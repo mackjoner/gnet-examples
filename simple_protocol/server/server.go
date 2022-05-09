@@ -75,13 +75,13 @@ func (s *simpleServer) OnTraffic(c gnet.Conn) (action gnet.Action) {
 		// TODO
 		// receive data conversion to http request
 		// http response write to packet
-		// packet, _ := codec.Encode(data)
+		packet, _ := codec.Encode(data[:protocol.HeaderSize], mockResp)
 		if data[1] == protocol.MsgHeartBeat {
 			fmt.Printf("%s 心跳包 %s\n", c.RemoteAddr().String(), c.LocalAddr().String())
 			packets = append(packets, heartbeatResp)
 		} else {
 			// packet := []byte(`{"foo":"bar"}`)
-			packets = append(packets, mockResp)
+			packets = append(packets, packet)
 		}
 	}
 	// write data packet

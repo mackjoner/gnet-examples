@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/panjf2000/gnet/v2"
@@ -24,6 +23,8 @@ const (
 	messageTypeSize   = 1
 	messageNumberSize = 2
 	bodySize          = 4
+
+	HeaderSize = 8
 
 	MsgHeartBeat byte = 1
 	MsgData      byte = 2
@@ -52,15 +53,15 @@ type BodyData struct {
 	Data []byte `json:"data"`
 }
 
-func (codec SimpleCodec) Encode(body []byte, msgType byte, msgNumber uint16, serverRouter byte) ([]byte, error) {
+func (codec SimpleCodec) Encode(header []byte, body []byte) ([]byte, error) {
 	bodyOffset := protoVersionSize + messageTypeSize + messageNumberSize + bodySize
 	msgLen := bodyOffset + len(body)
 	data := make([]byte, msgLen)
-	header := make([]byte, bodyOffset)
-	header[0] = DefaultProtoVersion
-	header[1] = msgType
-	binary.BigEndian.PutUint16(header[2:4], msgNumber)
-	binary.BigEndian.PutUint32(header[4:8], uint32(len(body)))
+	//header := make([]byte, bodyOffset)
+	//header[0] = DefaultProtoVersion
+	//header[1] = msgType
+	//binary.BigEndian.PutUint16(header[2:4], msgNumber)
+	//binary.BigEndian.PutUint32(header[4:8], uint32(len(body)))
 	copy(data[:bodyOffset], header)
 	copy(data[bodyOffset:msgLen], body)
 	return data, nil
@@ -104,17 +105,18 @@ func (codec *SimpleCodec) Decode(c gnet.Conn) ([]byte, error) {
 	// 调用 http 接口的 handler
 	// 返回 http 接口的 response
 	if buf[1] == MsgData || buf[1] == MsgZipData || buf[1] == MsgGzipData {
-		var bodyData BodyData
-		err = jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(msgData, &bodyData)
+		//var bodyData BodyData
+		_, err := jsoniter.ConfigCompatibleWithStandardLibrary.Marshal(msgData)
+		//err = jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(msgData, &bodyData)
 		if err != nil {
 			logging.Errorf("byte unmarshal err: %s\n", err.Error())
 		}
-		logging.Infof("uri: %s, request data: %+v\n", bodyData.URI, bodyData.Data)
-		url, err := url.Parse(bodyData.URI)
-		if err != nil {
-			logging.Infof("ParseRequestURI err: %s\n", err.Error())
-		}
-		logging.Infof("scheme: %s,host: %s, path: %s\n", url.Scheme, url.Host, url.Path)
+		//logging.Infof("uri: %s, request data: %+v\n", bodyData.URI, bodyData.Data)
+		//url, err := url.Parse(bodyData.URI)
+		//if err != nil {
+		//logging.Infof("ParseRequestURI err: %s\n", err.Error())
+		//}
+		//logging.Infof("scheme: %s,host: %s, path: %s\n", url.Scheme, url.Host, url.Path)
 		// onMessage(bodyData.URI, bodyData.Data)
 	}
 
