@@ -54,22 +54,25 @@ type BodyData struct {
 }
 
 func (codec SimpleCodec) Encode(header []byte, body []byte) ([]byte, error) {
+	var encodeData []byte
 	bodyOffset := protoVersionSize + messageTypeSize + messageNumberSize + bodySize
-	if header[1] == MsgZipData {
-		body = EncodeZlib(body)
+	switch header[1] {
+	case MsgGzipData:
+		encodeData = EncodeGzip(body)
+	case MsgZipData:
+		encodeData = EncodeZlib(body)
+	default:
+		encodeData = body
 	}
-	if header[1] == MsgGzipData {
-		body = EncodeGzip(body)
-	}
-	msgLen := bodyOffset + len(body)
+	msgLen := bodyOffset + len(encodeData)
 	data := make([]byte, msgLen)
 	//header := make([]byte, bodyOffset)
 	//header[0] = DefaultProtoVersion
 	//header[1] = msgType
 	//binary.BigEndian.PutUint16(header[2:4], msgNumber)
-	//binary.BigEndian.PutUint32(header[4:8], uint32(len(body)))
+	binary.BigEndian.PutUint32(header[4:8], uint32(len(encodeData)))
 	copy(data[:bodyOffset], header)
-	copy(data[bodyOffset:msgLen], body)
+	copy(data[bodyOffset:msgLen], encodeData)
 	return data, nil
 }
 

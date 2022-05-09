@@ -54,8 +54,8 @@ func (s *simpleServer) OnTraffic(c gnet.Conn) (action gnet.Action) {
 	// protocol
 	codec := c.Context().(*protocol.SimpleCodec)
 	var (
-		packets       [][]byte
-		heartbeatResp []byte
+		packets [][]byte
+		//heartbeatResp []byte
 	)
 
 	for {
@@ -76,13 +76,13 @@ func (s *simpleServer) OnTraffic(c gnet.Conn) (action gnet.Action) {
 		// receive data conversion to http request
 		// http response write to packet
 		packet, _ := codec.Encode(data[:protocol.HeaderSize], mockResp)
-		if data[1] == protocol.MsgHeartBeat {
-			fmt.Printf("%s 心跳包 %s\n", c.RemoteAddr().String(), c.LocalAddr().String())
-			packets = append(packets, heartbeatResp)
-		} else {
-			// packet := []byte(`{"foo":"bar"}`)
-			packets = append(packets, packet)
-		}
+		//if data[1] == protocol.MsgHeartBeat {
+		//	fmt.Printf("%s 心跳包 %s\n", c.RemoteAddr().String(), c.LocalAddr().String())
+		//	packets = append(packets, heartbeatResp)
+		//} else {
+		// packet := []byte(`{"foo":"bar"}`)
+		packets = append(packets, packet)
+		//}
 	}
 	// write data packet
 	if n := len(packets); n > 1 {
