@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/evanphx/wildcat v0.0.0-20141114174135-e7012f664567
 	github.com/gobwas/ws v1.1.0
+	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/json-iterator/go v1.1.12
 	github.com/panjf2000/gnet/v2 v2.0.0
